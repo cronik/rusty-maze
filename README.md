@@ -10,6 +10,7 @@ Console Maze game written in Rust.
 - Draw options: large/small
 - Difficulty: Hard/Normal 
 - Timer
+- Save/Share/Replay maze
 
 ## Usage
 

@@ -112,7 +112,7 @@ impl Joystick<'_> {
         if let Some(p) = self.maze.move_pos(self.pos, d) {
             self.pos = p;
             self.history.push((self.board_pos(), Some(*d)));
-            true;
+            return true;
         }
         false
     }
@@ -492,7 +492,8 @@ mod tests {
 
         // move to exit
         let mut j = m.joystick();
-        j.moves([Right, Down, Right, Down, Right, Down, Down, Right].iter());
+        let completed = j.moves([Right, Down, Right, Down, Right, Down, Down, Right].iter());
+        assert_eq!(completed.len(), 8);
         assert_eq!(j.pos, Position{x: 4, y: 4});
         assert_eq!(j.is_exit(), true);
 
