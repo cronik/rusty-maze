@@ -1,14 +1,12 @@
 
 use rand::Rng;
-use std::{vec, thread, time};
+use std::{vec};
 use thiserror::Error;
 use crate::disjset::Roots::{DisJoint};
 use crate::maze::Direction::{Left, Down, Up, Right};
 use std::collections::{HashSet, HashMap};
 use std::iter::FromIterator;
 use crate::disjset::DisjSet;
-use std::thread::Thread;
-
 
 #[derive(Error,Debug)]
 pub enum MazeError {
