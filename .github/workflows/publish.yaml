@@ -33,3 +33,4 @@ jobs:
           registry: ghcr.io
           repository: cronik/rusty-maze
           tag_with_ref: true
+          tags: latest

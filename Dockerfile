@@ -6,6 +6,8 @@ COPY src/ ./src
 RUN cargo install --path .
 
 FROM debian:stable-slim
-COPY --from=build /usr/local/cargo/bin/rusty_maze /usr/bin/maze
 # `rest -w` is a workaround to for this issue https://github.com/moby/moby/issues/33794
-ENTRYPOINT ["sh", "-c", "reset -w && maze"]
+RUN echo '#!/usr/bin/env sh\nreset -w && maze "$@"' > /usr/bin/entrypoint.sh \
+    && chmod 755 /usr/bin/entrypoint.sh
+COPY --from=build /usr/local/cargo/bin/rusty_maze /usr/bin/maze
+ENTRYPOINT ["/usr/bin/entrypoint.sh"]
