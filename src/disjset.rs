@@ -1,4 +1,4 @@
-use crate::disjset::Roots::{Same, DisJoint};
+use crate::disjset::Roots::{DisJoint, Same};
 
 /// DisjointSet according to my Data Structures and Algorithms textbook
 pub struct DisjSet {

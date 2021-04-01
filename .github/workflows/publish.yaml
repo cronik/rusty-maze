@@ -1,8 +1,24 @@
-name: Publish Docker image
+name: Publish Release
 on:
   release:
     types: [published]
 jobs:
+  upload_asset:
+    name: Build and upload asset
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Build
+        run: cargo build --verbose --release
+      - name: Run tests
+        run: cargo test --verbose
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            target/release/rust_maze
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   push_to_registry:
     name: Push Docker image to GitHub Container Registry
     runs-on: ubuntu-latest

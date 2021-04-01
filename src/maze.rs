@@ -1,20 +1,27 @@
+use std::vec;
+use std::collections::{HashMap, HashSet};
+use std::iter::FromIterator;
+use std::str::FromStr;
 
 use rand::Rng;
-use std::{vec};
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use crate::disjset::Roots::{DisJoint};
-use crate::maze::Direction::{Left, Down, Up, Right};
-use std::collections::{HashSet, HashMap};
-use std::iter::FromIterator;
+
 use crate::disjset::DisjSet;
+use crate::disjset::Roots::DisJoint;
+use crate::maze::Direction::{Down, Left, Right, Up};
 
 #[derive(Error,Debug)]
 pub enum MazeError {
     #[error("wall index out of bound: {:?}", .0)]
-    WallOutOfBounds((u16,u16))
+    WallOutOfBounds((u16,u16)),
+    #[error("invalid difficulty setting")]
+    DifficultyParseError,
+    #[error("invalid size setting")]
+    CellDrawSizeParseError
 }
 
-#[derive(Clone, Copy, Hash, Eq, PartialEq, Debug)]
+#[derive(Clone, Copy, Hash, Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub enum Direction {
     Left,
     Right,
@@ -31,7 +38,7 @@ pub struct CellBox {
     pub right: usize
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub struct Position {
     pub y: u16,
     pub x: u16
@@ -67,7 +74,7 @@ impl Joystick<'_> {
         Joystick {
             maze,
             pos,
-            history: vec![(maze.board_pos(pos), None)]
+            history: vec![(pos, None)]
         }
     }
 
@@ -111,7 +118,7 @@ impl Joystick<'_> {
     pub fn mv(&mut self, d: &Direction) -> bool {
         if let Some(p) = self.maze.move_pos(self.pos, d) {
             self.pos = p;
-            self.history.push((self.board_pos(), Some(*d)));
+            self.history.push((p, Some(*d)));
             return true;
         }
         false
@@ -129,25 +136,42 @@ impl Joystick<'_> {
         self.maze.pos_to_cell(self.pos) == self.maze.exit
     }
 
-    /// get the position in game board
-    pub fn board_pos(&self) -> Position {
-        let pbox = self.maze.translate_pos(&self.pos);
-        Position {
-            x: pbox.left as u16 + (self.maze.cell_width / 2),
-            y: pbox.top as u16 + (self.maze.cell_height / 2)
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub enum Difficulty {
+    Normal,
+    Hard
+}
+
+impl FromStr for Difficulty {
+    type Err = MazeError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "Hard" | "hard" | "h" => Ok(Difficulty::Hard),
+            "Normal" | "normal" | "norm" | "n" => Ok(Difficulty::Normal),
+            _ => Err(MazeError::DifficultyParseError)
         }
     }
 }
 
+pub struct Opts {
+    pub difficulty: Difficulty
+}
+
+impl Default for Opts {
+    fn default() -> Self { Opts { difficulty: Difficulty::Hard } }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Maze {
-    cells: DisjSet,
     walls: Vec<(u16, u16)>,
     enter: u16,
     exit: u16,
-    width: u16,
-    height: u16,
-    pub cell_width: u16,
-    pub cell_height: u16
+    size: u16,
+    pub width: u16,
+    pub height: u16
 }
 
 /// Maze is created by constructing a Disjoint Set for all the cells in the maze grid.
@@ -157,54 +181,59 @@ pub struct Maze {
 impl Maze {
 
     /// Create a new Maze of the given size
-    pub fn generate(w:u16, h:u16) -> Maze {
-        let size = w * h;
+    pub fn generate(width: u16, height: u16, opts: &Opts) -> Maze {
+        let size = width * height;
         let mut m = Maze {
-            cells: DisjSet::new(size as usize),
             walls: vec![(0, 0);0],
             enter: 0,
             exit: size - 1,
-            width: w,
-            height: h,
-            cell_width: 4,
-            cell_height: 2
+            size,
+            width,
+            height
         };
 
         for c in 0..size {
             // create right cell wall if not end of a row
-            if (c % w) != w - 1 {
+            if (c % width) != width - 1 {
                 m.walls.push((c, c + 1));
             }
 
             // create bottom cell wall if not last row
-            let b = c + w;
+            let b = c + width;
             if b < size {
                 m.walls.push((c, b));
             }
         }
 
         // randomly destroy some walls
+        let mut cells = DisjSet::new(size as usize);
         let mut rng = rand::thread_rng();
-        let hard = true;
-        if hard {
-            loop {
-                let i = rng.gen_range(0..m.walls.len());
-                let w = m.walls[i];
-                if let DisJoint(r1, r2) = m.cells.find_roots(w.0 as usize, w.1 as usize) {
-                    m.cells.union(r1, r2);
-                    m.walls.remove(i);
+        match opts.difficulty {
+            Difficulty::Hard => {
+                // remove walls until every cell in the maze if part of the same set
+                loop {
+                    let i = rng.gen_range(0..m.walls.len());
+                    let w = m.walls[i];
+                    // only remove walls of different sets, otherwise the maze will be trivialized
+                    if let DisJoint(r1, r2) = cells.find_roots(w.0 as usize, w.1 as usize) {
+                        cells.union(r1, r2);
+                        m.walls.remove(i);
+                    }
+                    if cells.distinct_sets() == 1 {
+                        break
+                    }
                 }
-                if m.cells.distinct_sets() == 1 {
-                    break
-                }
-            }
-        } else {
-            while let DisJoint(_, _) = m.cells.find_roots(m.enter as usize, m.exit as usize) {
-                let i = rng.gen_range(0..m.walls.len());
-                let w = m.walls[i];
-                if let DisJoint(r1, r2) = m.cells.find_roots(w.0 as usize, w.1 as usize) {
-                    m.cells.union(r1, r2);
-                    m.walls.remove(i);
+            },
+            Difficulty::Normal => {
+                // remove walls until enter and exit are of the same set
+                while let DisJoint(_, _) = cells.find_roots(m.enter as usize, m.exit as usize) {
+                    let i = rng.gen_range(0..m.walls.len());
+                    let w = m.walls[i];
+                    // only remove walls of different sets, otherwise the maze will be trivialized
+                    if let DisJoint(r1, r2) = cells.find_roots(w.0 as usize, w.1 as usize) {
+                        cells.union(r1, r2);
+                        m.walls.remove(i);
+                    }
                 }
             }
         }
@@ -216,14 +245,12 @@ impl Maze {
     pub fn create(w: u16, h: u16, walls: Vec<(u16, u16)>) -> Result<Maze, MazeError> {
         let size = w * h;
         let m = Maze {
-            cells: DisjSet::new(size as usize),
             walls: walls.clone(),
             enter: 0,
             exit: size - 1,
             width: w,
             height: h,
-            cell_width: 6,
-            cell_height: 2
+            size
         };
         for w in walls {
             if w.0 > m.exit || w.1 > m.exit {
@@ -310,8 +337,52 @@ impl Maze {
         }
     }
 
+    /// create joystick for moving and tracking.
+    pub fn joystick(&self) -> Joystick {
+        Joystick::create(self)
+    }
+
+    pub fn ui(&self) -> MazeUI {
+        MazeUI {
+            cell_width: 4,
+            cell_height: 2,
+            maze: self
+        }
+    }
+}
+
+pub struct MazeUI<'a> {
+    pub cell_width: u16,
+    pub cell_height: u16,
+    maze: &'a Maze
+}
+
+/// Maze position locator
+pub trait Locate<T> {
+    /// locate the center of the cell box for the given maze position
+    fn locate(&self, t: &T) -> Position;
+}
+
+impl Locate<Position> for MazeUI<'_> {
+    fn locate(&self, p: &Position) -> Position {
+        let pbox = self.cell_box(p);
+        Position {
+            x: pbox.left as u16 + (self.cell_width / 2),
+            y: pbox.top as u16 + (self.cell_height / 2)
+        }
+    }
+}
+
+impl Locate<Joystick<'_>> for MazeUI<'_> {
+    fn locate(&self, j: &Joystick) -> Position {
+        self.locate(&j.pos)
+    }
+}
+
+impl MazeUI<'_> {
+
     /// compute the bounding box for a cell in the maze
-    fn translate_pos(&self, p: &Position) -> CellBox {
+    fn cell_box(&self, p: &Position) -> CellBox {
         CellBox {
             top: (p.y * self.cell_height) as usize,
             left: (p.x * self.cell_width) as usize,
@@ -320,48 +391,33 @@ impl Maze {
         }
     }
 
-    pub fn board_pos(&self, p: Position) -> Position {
-        let pbox = self.translate_pos(&p);
-        Position {
-            x: pbox.left as u16 + (self.cell_width / 2),
-            y: pbox.top as u16 + (self.cell_height / 2)
-        }
+    /// dimensions of maze board (width, height)
+    pub fn dimensions(&self) -> (u16, u16) {
+        (self.maze.width * self.cell_width, self.maze.height * self.cell_height)
     }
 
-    pub fn exit_board_pos(&self) -> Position {
-        self.board_pos(self.cell_to_pos(self.exit))
+    /// get the exit position
+    pub fn exit(&self) -> Position {
+        self.locate(&self.maze.cell_to_pos(self.maze.exit))
     }
 
-    /// create joystick for moving and tracking.
-    pub fn joystick(&self) -> Joystick {
-        Joystick::create(self)
-    }
-
-    pub fn board_size(&self) -> (u16, u16) {
-        (self.width * self.cell_width, self.height * self.cell_height)
-    }
-
-    /// 0     6
-    /// *-----*
-    /// |
-    /// *-----*
-    /// 2
-    pub fn draw_board(&self) -> Vec<Vec<char>> {
+    /// draw maze as a matrix of cell boxes
+    pub fn draw(&self) -> Vec<Vec<char>> {
         // init board matrix
         let cp= self.cell_width - 1;
-        let bw = ((self.width * cp) + (self.width + 1)) as usize; // board width
-        let bh = ((self.height * 2) + 1) as usize; // board height
+        let bw = ((self.maze.width * cp) + (self.maze.width + 1)) as usize; // board width
+        let bh = ((self.maze.height * 2) + 1) as usize; // board height
         let mut board = vec![vec![' '; bw]; bh];
 
         let row = | r: &mut Vec<char>, st: char, end: char, join: char, pad: char | {
             let mut i = 0;
             r[i] = st;
-            for c in 0..self.width {
+            for c in 0..self.maze.width {
                 for _ in 0..cp {
                     i = i + 1;
                     r[i] = pad;
                 }
-                if c < self.width - 1 {
+                if c < self.maze.width - 1 {
                     i = i + 1;
                     r[i] = join;
                 }
@@ -372,7 +428,7 @@ impl Maze {
 
         // build grid
         row(&mut board[0], '┌', '┐', '┬', '─');
-        for i in 0..self.height {
+        for i in 0..self.maze.height {
             let r = ((i * 2) + 1) as usize;
             row(&mut board[r], '│', '│', '│', ' ');
             row(&mut board[r + 1], '├', '┤', '┼', '─');
@@ -380,11 +436,10 @@ impl Maze {
         row(&mut board[bh - 1], '└', '┘', '┴', '─');
 
         // remove walls
-
-        for i in 0..self.cells.len() {
-            let p = self.cell_to_pos(i as u16);
-            let pbox = self.translate_pos(&p);
-            let moves = self.movements(p);
+        for i in 0..self.maze.size {
+            let p = self.maze.cell_to_pos(i as u16);
+            let pbox = self.cell_box(&p);
+            let moves = self.maze.movements(p);
             if moves.contains(&Left) {
                 for rw in pbox.top..=pbox.bottom {
                     board[rw][pbox.left] = ' ';
@@ -462,15 +517,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_create() {
-        let m = Maze::generate(5, 5);
-        assert_eq!(m.cells.lookup(m.enter as usize), m.cells.lookup(m.exit as usize));
-    }
-
-    #[test]
-    fn test_draw_matrix() {
-        let m = Maze::generate(15, 15);
-        let matrix = m.draw_board();
+    fn test_ui_draw() {
+        let m = Maze::generate(15, 15, &Default::default());
+        let matrix = m.ui().draw();
         for r in matrix {
             println!("{}", String::from_iter(r));
         }
