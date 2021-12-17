@@ -1,3 +1,3 @@
-pub mod maze;
-pub mod game;
 mod disjset;
+pub mod game;
+pub mod maze;

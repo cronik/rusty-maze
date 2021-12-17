@@ -2,26 +2,25 @@ use crate::disjset::Roots::{DisJoint, Same};
 
 /// DisjointSet according to my Data Structures and Algorithms textbook
 pub struct DisjSet {
-    nodes: Vec<Option<usize>>
+    nodes: Vec<Option<usize>>,
 }
 
 /// Status of 2 sets relative to each other.
 #[derive(Debug)]
 pub enum Roots {
     Same(usize),
-    DisJoint(usize, usize)
+    DisJoint(usize, usize),
 }
 
 impl DisjSet {
-
-    pub fn new(size:usize) -> DisjSet {
+    pub fn new(size: usize) -> DisjSet {
         return DisjSet {
-            nodes: vec![None; size]
-        }
+            nodes: vec![None; size],
+        };
     }
 
     /// join the the 2 sets
-    pub fn union(&mut self, r1:usize, r2: usize) {
+    pub fn union(&mut self, r1: usize, r2: usize) {
         self.nodes[r2] = Some(r1);
     }
 
@@ -29,16 +28,12 @@ impl DisjSet {
     pub fn find_roots(&mut self, a: usize, b: usize) -> Roots {
         let ra = self.find(a);
         let rb = self.find(b);
-        return if ra == rb {
-            Same(ra)
-        } else {
-            DisJoint(ra, rb)
-        }
+        return if ra == rb { Same(ra) } else { DisJoint(ra, rb) };
     }
 
     /// find the root of the given set.
     /// uses the path compression method to optimize subsequent lookups.
-    pub fn find(&mut self, c:usize) -> usize {
+    pub fn find(&mut self, c: usize) -> usize {
         return match self.nodes[c] {
             None => c,
             Some(p) => {
@@ -51,11 +46,11 @@ impl DisjSet {
 
     /// lookup root of the given set.
     /// this method differs from find in that it doesn't compress the path.
-    pub fn lookup(&self, c:usize) -> usize {
+    pub fn lookup(&self, c: usize) -> usize {
         return match self.nodes[c] {
             None => c,
-            Some(s) => self.lookup(s)
-        }
+            Some(s) => self.lookup(s),
+        };
     }
 
     /// get the size of the nodes in the universe.
@@ -65,8 +60,12 @@ impl DisjSet {
 
     /// get count of nodes not in a union set with other nodes
     pub fn distinct_sets(&self) -> usize {
-        self.nodes.iter()
-            .filter(|c| match c { None => true, _ => false})
+        self.nodes
+            .iter()
+            .filter(|c| match c {
+                None => true,
+                _ => false,
+            })
             .count()
     }
 }

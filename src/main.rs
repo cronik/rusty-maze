@@ -12,18 +12,26 @@ use std::io::BufReader;
 #[derive(Debug, StructOpt)]
 #[structopt(name = "rusty_maze", about = "Rusty Maze Game")]
 struct Opt {
-    #[structopt(short = "w", long = "width", help = "Maze width [default: terminal width]")]
+    #[structopt(
+        short = "w",
+        long = "width",
+        help = "Maze width [default: terminal width]"
+    )]
     width: Option<u16>,
-    #[structopt(short = "h", long = "height", help = "Maze height [default: terminal height]")]
+    #[structopt(
+        short = "h",
+        long = "height",
+        help = "Maze height [default: terminal height]"
+    )]
     height: Option<u16>,
     #[structopt(short = "d", long, default_value = "Hard", help = "Maze difficulty")]
     difficulty: Difficulty,
     #[structopt(name = "FILE", parse(from_os_str), help = "Maze data to restore")]
-    file: Option<PathBuf>
+    file: Option<PathBuf>,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let opt:Opt = Opt::from_args();
+    let opt: Opt = Opt::from_args();
 
     // Get and lock the stdios.
     let stdout = std::io::stdout();
@@ -36,12 +44,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     if let Some(path) = opt.file {
         let file = File::open(path)?;
-        let state :GameState = ron::de::from_reader(BufReader::new(file))?;
+        let state: GameState = ron::de::from_reader(BufReader::new(file))?;
         Game::restore(stdout, stdin.keys(), &state);
     } else {
         let termsize = termion::terminal_size().ok();
-        let termwidth = termsize.map(|(w,_)| w / 4);
-        let termheight = termsize.map(|(_,h)| (h / 2) - 1);
+        let termwidth = termsize.map(|(w, _)| w / 4);
+        let termheight = termsize.map(|(_, h)| (h / 2) - 1);
 
         let width = opt.width.or(termwidth).unwrap().max(5);
         let height = opt.height.or(termheight).unwrap().max(5);

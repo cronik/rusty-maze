@@ -1,4 +1,4 @@
-FROM rust:1.50 as build
+FROM rust:1.57 as build
 
 WORKDIR /usr/src/rusty_maze
 COPY Cargo.lock Cargo.toml ./
